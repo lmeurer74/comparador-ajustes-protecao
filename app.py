@@ -107,16 +107,14 @@ VARIACOES_DESCRICAO = {
 # FUNÇÕES AUXILIARES
 # ==============================================================================
 def limpar_espacos(texto):
-    if texto is None:
-        return ""
+    if texto is None: return ""
     return " ".join(str(texto).strip().split())
 
 def chave_normalizada(texto):
     return "".join(limpar_espacos(texto).lower().split())
 
 def normalizar_para_comparacao(valor):
-    if valor is None:
-        return ""
+    if valor is None: return ""
     s = str(valor).strip()
     if s.upper() in ["YES", "1", "TRUE"]: return "YES"
     if s.upper() in ["NO", "0", "FALSE"]: return "NO"
@@ -218,10 +216,6 @@ def gerar_biblioteca_memoria(dois_por_ln, fabricante="ARTECHE_ADATECH"):
                     ws_bib.append([cod_excel, secao, subgrupo, limpar_espacos(ovr_desc), cod_cid])
                     registros.add(chave)
 
-    for aba_futura in ["SCHNEIDER_ADVC", "NOJA_RC10", "COOPER_FORM6"]:
-        ws_f = wb_bib.create_sheet(title=aba_futura)
-        ws_f.append(["Codigo_Excel", "Secao", "Subgrupo", "Descricao_Excel", "Codigo_Equipamento"])
-
     de_para_cod = {}
     de_para_campos = {}
     for row in ws_bib.iter_rows(min_row=2, values_only=True):
@@ -234,6 +228,18 @@ def gerar_biblioteca_memoria(dois_por_ln, fabricante="ARTECHE_ADATECH"):
     wb_bib.save(bib_io)
     bib_io.seek(0)
     return de_para_cod, de_para_campos, bib_io
+
+def ler_biblioteca_anexada(file_bib, fabricante):
+    wb_bib = openpyxl.load_workbook(file_bib, data_only=True)
+    ws_bib = wb_bib[fabricante] if fabricante in wb_bib.sheetnames else wb_bib.active
+    de_para_cod = {}
+    de_para_campos = {}
+    for row in ws_bib.iter_rows(min_row=2, values_only=True):
+        if not row or len(row) < 5 or not row[4]: continue
+        cod_xls, sec, sub, desc, cod_cid = [limpar_espacos(c) for c in row[:5]]
+        if cod_xls: de_para_cod[chave_normalizada(cod_xls)] = cod_cid
+        if desc: de_para_campos[(chave_normalizada(sec), chave_normalizada(sub), chave_normalizada(desc))] = cod_cid
+    return de_para_cod, de_para_campos
 
 def extrair_parametros_da_aba(ws, de_para_cod, de_para_campos, dois_por_ln):
     eh_modelo_1 = False
@@ -248,7 +254,6 @@ def extrair_parametros_da_aba(ws, de_para_cod, de_para_campos, dois_por_ln):
     secao, subgrupo = "", ""
 
     if eh_modelo_1:
-        tipo_modelo = "MODELO 1 (Com Código)"
         for r in range(14, ws.max_row + 1):
             b_val = limpar_espacos(ws.cell(r, 2).value)
             c_val = limpar_espacos(ws.cell(r, 3).value)
@@ -265,7 +270,6 @@ def extrair_parametros_da_aba(ws, de_para_cod, de_para_campos, dois_por_ln):
                 if not cod_cid: cod_cid = de_para_campos.get((chave_normalizada(secao), chave_normalizada(subgrupo), chave_normalizada(d_val)), b_val)
                 itens_oa.append({"col_a": b_val, "col_b": f"{subgrupo} - {d_val}" if subgrupo else d_val, "col_c": g_val, "cod_cid": cod_cid})
     else:
-        tipo_modelo = "MODELO 2 (Sem Código)"
         for r in range(12, ws.max_row + 1):
             b_val = limpar_espacos(ws.cell(r, 2).value)
             c_val = limpar_espacos(ws.cell(r, 3).value)
@@ -287,7 +291,22 @@ def extrair_parametros_da_aba(ws, de_para_cod, de_para_campos, dois_por_ln):
                         cod_cid = f"{full_ln}.{dois_por_ln[full_ln][chave_normalizada(c_val)][0]}"
                 itens_oa.append({"col_a": "", "col_b": f"{subgrupo} - {c_val}" if subgrupo else c_val, "col_c": val_oa, "cod_cid": cod_cid if cod_cid else "SEM_DE_PARA"})
 
-    return tipo_modelo, itens_oa
+    return itens_oa
+
+# Formatação de cores para a Tabela Web
+def style_dataframe_resultados(row):
+    styles = [''] * len(row)
+    for i, col in enumerate(row.index):
+        if col.startswith('Grupo'):
+            val_cid = row[col]
+            val_oa = row['Ajuste OA']
+            if val_cid == "-":
+                styles[i] = 'color: gray; text-align: center;'
+            elif normalizar_para_comparacao(val_oa) == normalizar_para_comparacao(val_cid):
+                styles[i] = 'color: #006100; font-weight: bold;' # Verde OK
+            else:
+                styles[i] = 'background-color: #FFC7CE; color: #9C0006; font-weight: bold;' # Vermelho Diferente
+    return styles
 
 # ==============================================================================
 # INTERFACE STREAMLIT
@@ -295,19 +314,22 @@ def extrair_parametros_da_aba(ws, de_para_cod, de_para_campos, dois_por_ln):
 st.set_page_config(page_title="Comparador de Ajustes - Proteção", layout="wide")
 st.title("⚡ Comparador de Ajustes de Proteção (OA vs Equipamento)")
 
-col1, col2, col3 = st.columns(3)
+# Agora com 4 Colunas (incluindo o De-Para Opcional)
+col1, col2, col3, col4 = st.columns(4)
 with col1:
     fabricante = st.selectbox("1. Modelo do Equipamento:", ["ARTECHE_ADATECH", "SCHNEIDER_ADVC", "NOJA_RC10", "COOPER_FORM6"])
 with col2:
-    file_xlsx = st.file_uploader("2. Planilha Ordem de Ajuste (.xlsx):", type=["xlsx"])
+    file_xlsx = st.file_uploader("2. Ordem de Ajuste (.xlsx):", type=["xlsx"])
 with col3:
-    file_cid = st.file_uploader("3. Arquivo do Equipamento (.cid / .xml):", type=["cid", "xml", "icd"])
+    file_cid = st.file_uploader("3. Arquivo do Equipamento (.cid):", type=["cid", "xml", "icd"])
+with col4:
+    file_bib = st.file_uploader("4. De-Para (.xlsx) [Opcional]:", type=["xlsx"], help="Se vazio, a biblioteca embutida será usada.")
 
 if file_xlsx:
     wb_in = openpyxl.load_workbook(file_xlsx, data_only=True)
     nomes_abas = wb_in.sheetnames
     
-    st.markdown("### 🔗 4. Associação de Abas da Planilha com os Grupos do CID")
+    st.markdown("### 🔗 Associação de Abas da Planilha com os Grupos do CID")
     
     abas_grupo = [n for n in nomes_abas if re.search(r'GRUPO\s*[123456]|GROUP\s*[123456]', n.upper())]
     abas_ajuste = [n for n in nomes_abas if "AJUSTE" in n.upper() or "SETTING" in n.upper()]
@@ -342,12 +364,18 @@ if file_xlsx:
         else:
             with st.spinner("A processar a conferência..."):
                 doi_por_codigo, dois_por_ln, ns = DriverArtecheAdaTech.carregar_equipamento(file_cid.read())
-                de_para_cod, de_para_campos, bib_io = gerar_biblioteca_memoria(dois_por_ln, fabricante)
+                
+                # Lógica do De-Para Opcional
+                bib_io = None
+                if file_bib is not None:
+                    de_para_cod, de_para_campos = ler_biblioteca_anexada(file_bib, fabricante)
+                else:
+                    de_para_cod, de_para_campos, bib_io = gerar_biblioteca_memoria(dois_por_ln, fabricante)
 
                 wb_out = openpyxl.Workbook()
                 aba_padrao = wb_out.active
                 
-                # Estilos
+                # Estilos do Excel
                 fill_cab = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
                 font_cab = Font(color="FFFFFF", bold=True)
                 fill_vermelho = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
@@ -357,6 +385,7 @@ if file_xlsx:
                                top=Side(style='thin', color='D9D9D9'), bottom=Side(style='thin', color='D9D9D9'))
 
                 processou_algo = False
+                resultados_web = [] # Guardar resultados para mostrar na tela
 
                 for index, row in df_editado.iterrows():
                     if not row["Processar"]: continue
@@ -369,7 +398,7 @@ if file_xlsx:
                     if not grupos_ativos: continue
 
                     ws_in = wb_in[nome_aba]
-                    tipo_modelo, itens_oa = extrair_parametros_da_aba(ws_in, de_para_cod, de_para_campos, dois_por_ln)
+                    itens_oa = extrair_parametros_da_aba(ws_in, de_para_cod, de_para_campos, dois_por_ln)
                     if not itens_oa: continue
                     processou_algo = True
 
@@ -384,15 +413,24 @@ if file_xlsx:
                     total = len(itens_oa)
                     corretos = {1: 0, 2: 0, 3: 0}
                     diferentes = {1: 0, 2: 0, 3: 0}
+                    linhas_tabela_web = []
 
                     for i, item in enumerate(itens_oa, start=linha_inicio + 1):
                         cod_alvo = item["cod_cid"]
                         doi = doi_por_codigo.get(cod_alvo) or (doi_por_codigo.get(cod_alvo.split(".", 1)[-1]) if "." in cod_alvo else None)
                         val_oa = item["col_c"]
                         
+                        # Escreve no Excel
                         ws_out.cell(i, 1, item["col_a"]).border = borda
                         ws_out.cell(i, 2, item["col_b"]).border = borda
                         ws_out.cell(i, 3, "" if val_oa is None else val_oa).border = borda
+
+                        # Prepara linha para a Tela (Web)
+                        linha_web = {
+                            "Código": str(item["col_a"]),
+                            "Descrição": str(item["col_b"]),
+                            "Ajuste OA": "" if val_oa is None else str(val_oa)
+                        }
 
                         for tab_idx, col_excel in [(1, 4), (2, 5), (3, 6)]:
                             cel = ws_out.cell(i, col_excel)
@@ -400,6 +438,8 @@ if file_xlsx:
                             if tab_idx in grupos_ativos:
                                 val_cid = DriverArtecheAdaTech.obter_valor(doi, ns, str(tab_idx))
                                 cel.value = val_cid
+                                linha_web[f"Grupo {tab_idx}"] = str(val_cid)
+                                
                                 if normalizar_para_comparacao(val_oa) == normalizar_para_comparacao(val_cid):
                                     corretos[tab_idx] += 1
                                 else:
@@ -408,7 +448,11 @@ if file_xlsx:
                             else:
                                 cel.value = "-"
                                 cel.alignment = Alignment(horizontal="center")
+                                linha_web[f"Grupo {tab_idx}"] = "-"
+                        
+                        linhas_tabela_web.append(linha_web)
 
+                    # Cabeçalho Relatório Excel
                     grupos_txt = ", ".join([f"Grupo {g}" for g in grupos_ativos])
                     ws_out.cell(1, 1, f"RELATÓRIO GERAL - ABA '{nome_aba}' vs CID ({grupos_txt})").font = Font(bold=True, size=12)
                     ws_out.cell(2, 2, "Indicador").font = Font(bold=True)
@@ -430,6 +474,14 @@ if file_xlsx:
                     for col_idx, w in {1: 22, 2: 58, 3: 26, 4: 26, 5: 26, 6: 26}.items():
                         ws_out.column_dimensions[openpyxl.utils.get_column_letter(col_idx)].width = w
 
+                    resultados_web.append({
+                        "nome": nome_aba,
+                        "total": total,
+                        "corretos": corretos,
+                        "diferentes": diferentes,
+                        "df": pd.DataFrame(linhas_tabela_web)
+                    })
+
                 if processou_algo:
                     wb_out.remove(aba_padrao)
                     excel_io = io.BytesIO()
@@ -437,8 +489,34 @@ if file_xlsx:
                     excel_io.seek(0)
                     
                     st.success("✅ Conferência concluída com sucesso!")
+                    
+                    # Botões de Download
                     col_dl1, col_dl2 = st.columns(2)
                     col_dl1.download_button("📥 Baixar Planilha de Conferência (.xlsx)", excel_io, "Resultado_Conferencia.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                    col_dl2.download_button("📚 Baixar Biblioteca De-Para (.xlsx)", bib_io, "biblioteca_de_para.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                    if bib_io is not None:
+                        col_dl2.download_button("📚 Baixar Biblioteca De-Para Gerada (.xlsx)", bib_io, "biblioteca_de_para.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+                    # ==== RENDERIZAR TABELAS E RESUMOS NA TELA ====
+                    st.markdown("---")
+                    st.subheader("📊 Relatório de Conferência")
+                    
+                    abas_nomes = [res["nome"] for res in resultados_web]
+                    tabs = st.tabs(abas_nomes)
+                    
+                    for i, tab in enumerate(tabs):
+                        res = resultados_web[i]
+                        with tab:
+                            st.markdown(f"**Total Processado:** {res['total']} parâmetros")
+                            
+                            c1, c2, c3 = st.columns(3)
+                            c1.info(f"**Grupo 1:** {res['corretos'][1]} OK / {res['diferentes'][1]} Diferentes")
+                            c2.info(f"**Grupo 2:** {res['corretos'][2]} OK / {res['diferentes'][2]} Diferentes")
+                            c3.info(f"**Grupo 3:** {res['corretos'][3]} OK / {res['diferentes'][3]} Diferentes")
+                            
+                            st.dataframe(
+                                res["df"].style.apply(style_dataframe_resultados, axis=1),
+                                use_container_width=True,
+                                hide_index=True
+                            )
                 else:
                     st.warning("⚠️ Nenhuma aba válida foi processada.")
