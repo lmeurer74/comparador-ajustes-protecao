@@ -7,7 +7,7 @@ from leitor_rele import DriverArtecheAdaTech
 from comparador import executar_comparacao, style_dataframe_resultados
 
 st.set_page_config(page_title="Comparador de Ajustes", layout="wide")
-st.title("⚡ Comparador de Ajustes de Proteção (Modular)")
+st.title("⚡ Comparador de Ajustes de Proteção")
 
 if 'arquivos_lidos' not in st.session_state:
     st.session_state.arquivos_lidos = False
