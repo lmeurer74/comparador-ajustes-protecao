@@ -21,9 +21,13 @@ def normalizar_para_comparacao(valor):
 def style_dataframe_resultados(row):
     styles = [''] * len(row)
     for i, col in enumerate(row.index):
-        if col.startswith('Grupo'):
+        if 'Relé' in col:
+            # Obtém o número do grupo a partir do nome da coluna (ex: "Relé G1")
+            grp_num = col.split(' ')[-1].replace('G', '')
+            col_oa = f"OA G{grp_num}"
             val_cid = row[col]
-            val_oa = row['Ajuste OA']
+            val_oa = row.get(col_oa, "")
+            
             if val_cid == "-":
                 styles[i] = 'color: gray; text-align: center;'
             elif normalizar_para_comparacao(val_oa) == normalizar_para_comparacao(val_cid):
@@ -56,24 +60,25 @@ def executar_comparacao(df_selecao_usuario, wb_in, fabricante, bytes_cid, filena
         if not grupos_ativos or nome_aba not in wb_in.sheetnames: continue
 
         ws_in = wb_in[nome_aba]
-        
-        # Envia a informação do Fabricante para o leitor de Excel
         itens_oa = extrair_parametros_visiveis(ws_in, fabricante, de_para_cod, de_para_campos, dois_por_ln, conf_colunas)
-
+        
         if not itens_oa: continue
         processou_algo = True
         
         ws_out = wb_out.create_sheet(title=f"CONF_{nome_aba}"[:31])
         linha_inicio = 8
-        titulos = ["CÓDIGO (Referência)", "DESCRIÇÃO DOS PARÂMETROS", f"AJUSTE OA ({nome_aba})", "RELE - Grupo 1", "RELE - Grupo 2", "RELE - Grupo 3"]
+        titulos = ["CÓDIGO (Referência)", "DESCRIÇÃO DOS PARÂMETROS"]
+        # Adiciona títulos para cada grupo ativo
+        for g in grupos_ativos:
+            titulos.extend([f"Ajuste OA (G{g})", f"Equipamento Relé (G{g})"])
         
         for col_idx, t in enumerate(titulos, start=1):
             c = ws_out.cell(linha_inicio, col_idx, t)
             c.fill, c.font, c.alignment = fill_cab, font_cab, Alignment(horizontal="center", vertical="center")
 
         total = len(itens_oa)
-        corretos = {1: 0, 2: 0, 3: 0}
-        diferentes = {1: 0, 2: 0, 3: 0}
+        corretos = {g: 0 for g in grupos_ativos}
+        diferentes = {g: 0 for g in grupos_ativos}
         linhas_tabela_web = []
 
         for i, item in enumerate(itens_oa, start=linha_inicio + 1):
@@ -81,66 +86,73 @@ def executar_comparacao(df_selecao_usuario, wb_in, fabricante, bytes_cid, filena
             if cod_alvo == "SEM_DE_PARA" and item["col_a"]:
                 cod_alvo = item["col_a"]
 
-            # Para a SEL, o código é direto. Para a Arteche, ele decodifica os dicionários.
             if fabricante == "SEL (Schweitzer)":
                 doi = cod_alvo
             else:
                 doi = doi_por_codigo.get(cod_alvo) or (doi_por_codigo.get(cod_alvo.split(".", 1)[-1]) if "." in cod_alvo else None)
-                
-            val_oa = item["col_c"]
             
-            # Mostra o código encontrado na Tela e no Excel
             codigo_exibicao = str(item["col_a"]).strip() if str(item["col_a"]).strip() else str(cod_alvo)
             if codigo_exibicao == "SEM_DE_PARA": codigo_exibicao = "-"
             
             ws_out.cell(i, 1, codigo_exibicao).border = borda
             ws_out.cell(i, 2, item["col_b"]).border = borda
-            ws_out.cell(i, 3, "" if val_oa is None else val_oa).border = borda
 
-            linha_web = {"Código": codigo_exibicao, "Descrição": str(item["col_b"]), "Ajuste OA": "" if val_oa is None else str(val_oa)}
+            linha_web = {"Código": codigo_exibicao, "Descrição": str(item["col_b"])}
 
-            for tab_idx, col_excel in [(1, 4), (2, 5), (3, 6)]:
-                cel = ws_out.cell(i, col_excel)
-                cel.border = borda
-                if tab_idx in grupos_ativos:
-                    val_cid = driver_rele.obter_valor(doi, ns_or_dados_sel, str(tab_idx))
-                    cel.value = val_cid
-                    linha_web[f"Grupo {tab_idx}"] = str(val_cid)
-                    
-                    if normalizar_para_comparacao(val_oa) == normalizar_para_comparacao(val_cid):
-                        corretos[tab_idx] += 1
-                    else:
-                        diferentes[tab_idx] += 1
-                        cel.fill, cel.font = fill_vermelho, font_vermelho
+            col_excel = 3
+            for tab_idx in grupos_ativos:
+                val_oa = item.get(f"val_g{tab_idx}")
+                val_cid = driver_rele.obter_valor(doi, ns_or_dados_sel, str(tab_idx))
+                
+                cel_oa = ws_out.cell(i, col_excel)
+                cel_rele = ws_out.cell(i, col_excel + 1)
+                
+                cel_oa.border = borda
+                cel_rele.border = borda
+                
+                cel_oa.value = "" if val_oa is None else val_oa
+                cel_rele.value = val_cid
+                
+                linha_web[f"OA G{tab_idx}"] = "" if val_oa is None else str(val_oa)
+                linha_web[f"Relé G{tab_idx}"] = str(val_cid)
+                
+                if normalizar_para_comparacao(val_oa) == normalizar_para_comparacao(val_cid):
+                    corretos[tab_idx] += 1
                 else:
-                    cel.value = "-"
-                    cel.alignment = Alignment(horizontal="center")
-                    linha_web[f"Grupo {tab_idx}"] = "-"
+                    diferentes[tab_idx] += 1
+                    cel_rele.fill, cel_rele.font = fill_vermelho, font_vermelho
+                
+                col_excel += 2
             
             linhas_tabela_web.append(linha_web)
 
         grupos_txt = ", ".join([f"Grupo {g}" for g in grupos_ativos])
         ws_out.cell(1, 1, f"RELATÓRIO GERAL - ABA '{nome_aba}' vs RELÉ ({grupos_txt})").font = Font(bold=True, size=12)
+        
+        resumo = [(3, "Parâmetros Processados", [total] * len(grupos_ativos))]
+        resumo.append((4, "Parâmetros Corretos", [corretos[g] for g in grupos_ativos]))
+        resumo.append((5, "Parâmetros Diferentes (Em Vermelho)", [diferentes[g] for g in grupos_ativos]))
+        
         ws_out.cell(2, 2, "Indicador").font = Font(bold=True)
-        ws_out.cell(2, 4, "Grupo 1").font = Font(bold=True)
-        ws_out.cell(2, 5, "Grupo 2").font = Font(bold=True)
-        ws_out.cell(2, 6, "Grupo 3").font = Font(bold=True)
+        col_resumo = 4
+        for g in grupos_ativos:
+            ws_out.cell(2, col_resumo, f"Resultados Grupo {g}").font = Font(bold=True)
+            col_resumo += 2
 
-        resumo = [
-            (3, "Parâmetros Processados", [total if g in grupos_ativos else "-" for g in [1, 2, 3]]),
-            (4, "Parâmetros Corretos", [corretos[g] if g in grupos_ativos else "-" for g in [1, 2, 3]]),
-            (5, "Parâmetros Diferentes (Em Vermelho)", [diferentes[g] if g in grupos_ativos else "-" for g in [1, 2, 3]])
-        ]
         for r_idx, lbl, vals in resumo:
             ws_out.cell(r_idx, 2, lbl).fill = fill_relatorio
-            for idx_v, v in enumerate(vals, start=4):
-                c = ws_out.cell(r_idx, idx_v, v)
+            col_val = 4
+            for v in vals:
+                c = ws_out.cell(r_idx, col_val, v)
                 c.fill, c.font, c.alignment = fill_relatorio, Font(bold=True), Alignment(horizontal="center")
+                col_val += 2
 
-        for col_idx, w in {1: 30, 2: 58, 3: 26, 4: 26, 5: 26, 6: 26}.items():
-            ws_out.column_dimensions[openpyxl.utils.get_column_letter(col_idx)].width = w
+        ws_out.column_dimensions['A'].width = 30
+        ws_out.column_dimensions['B'].width = 58
+        for col_idx in range(3, 3 + (len(grupos_ativos) * 2)):
+            ws_out.column_dimensions[openpyxl.utils.get_column_letter(col_idx)].width = 26
 
-        resultados_web.append({"nome": nome_aba, "total": total, "corretos": corretos, "diferentes": diferentes, "df": pd.DataFrame(linhas_tabela_web)})
+        resultados_web.append({"nome": nome_aba, "total": total, "corretos": corretos, "diferentes": diferentes, "df": pd.DataFrame(linhas_tabela_web), "grupos_ativos": grupos_ativos})
 
     if processou_algo:
         wb_out.remove(aba_padrao)
