@@ -10,11 +10,38 @@ def obter_abas_validas(wb):
                 abas_validas.append(sheet.title)
     return abas_validas
 
-def extrair_parametros_visiveis(ws, de_para_cod, de_para_campos, dois_por_ln):
+def extrair_parametros_visiveis(ws, fabricante, de_para_cod, de_para_campos, dois_por_ln):
     itens_oa = []
-    eh_modelo_1 = False
     
-    # Detetar Modelo 1 vs Modelo 2 ignorando linhas ocultas
+    # ---------------------------------------------------------
+    # LÓGICA EXCLUSIVA PARA RELÉS SEL (Schweitzer)
+    # ---------------------------------------------------------
+    if fabricante == "SEL (Schweitzer)":
+        for r in range(12, ws.max_row + 1):
+            if ws.row_dimensions[r].hidden: continue
+            
+            b_val = limpar_espacos(ws.cell(r, 2).value) # Código SEL
+            c_val = limpar_espacos(ws.cell(r, 3).value) # Descrição 
+            g_val = ws.cell(r, 7).value                 # Ajuste Sugerido OA
+            
+            if not b_val: continue
+            if b_val.upper() in ["PARAMETRO", "PARÂMETRO", "PARAMETER"]: continue
+            if b_val.upper() == "ELABORAÇÃO E IMPLANTAÇÃO": break
+            if b_val.startswith(">>") or "CONFIGURATION" in b_val.upper(): continue
+            if b_val.upper().startswith("MOTIVO"): continue
+            
+            itens_oa.append({
+                "col_a": b_val,     # O código vai para a interface
+                "col_b": c_val,     # A descrição
+                "col_c": g_val,     # O valor do ajuste do OA
+                "cod_cid": b_val    # Para a SEL, usamos o próprio código como chave direta!
+            })
+        return itens_oa
+
+    # ---------------------------------------------------------
+    # LÓGICA PARA ARTECHE E OUTROS (Modelos 1 e 2)
+    # ---------------------------------------------------------
+    eh_modelo_1 = False
     for r in range(12, min(45, ws.max_row + 1)):
         if ws.row_dimensions[r].hidden: continue
         b_v = limpar_espacos(ws.cell(r, 2).value)
