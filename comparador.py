@@ -27,13 +27,13 @@ def style_dataframe_resultados(row):
             if val_cid == "-":
                 styles[i] = 'color: gray; text-align: center;'
             elif normalizar_para_comparacao(val_oa) == normalizar_para_comparacao(val_cid):
-                styles[i] = 'color: #006100; font-weight: bold;' # Verde OK
+                styles[i] = 'color: #006100; font-weight: bold;'
             else:
-                styles[i] = 'background-color: #FFC7CE; color: #9C0006; font-weight: bold;' # Vermelho Diferente
+                styles[i] = 'background-color: #FFC7CE; color: #9C0006; font-weight: bold;'
     return styles
 
-def executar_comparacao(df_selecao_usuario, wb_in, fabricante, bytes_cid, de_para_cod, de_para_campos, driver_rele):
-    doi_por_codigo, dois_por_ln, ns = driver_rele.carregar_equipamento(bytes_cid)
+def executar_comparacao(df_selecao_usuario, wb_in, fabricante, bytes_cid, filename_rele, rele_escolhido, de_para_cod, de_para_campos, driver_rele):
+    doi_por_codigo, dois_por_ln, ns_or_dados_sel = driver_rele.carregar_equipamento(bytes_cid, filename_rele, rele_escolhido)
     
     wb_out = openpyxl.Workbook()
     aba_padrao = wb_out.active
@@ -63,7 +63,7 @@ def executar_comparacao(df_selecao_usuario, wb_in, fabricante, bytes_cid, de_par
         
         ws_out = wb_out.create_sheet(title=f"CONF_{nome_aba}"[:31])
         linha_inicio = 8
-        titulos = ["CÓDIGO (Referência CID)", "DESCRIÇÃO DOS PARÂMETROS", f"AJUSTE OA ({nome_aba})", "CID - Table 1 (G1)", "CID - Table 2 (G2)", "CID - Table 3 (G3)"]
+        titulos = ["CÓDIGO (Referência)", "DESCRIÇÃO DOS PARÂMETROS", f"AJUSTE OA ({nome_aba})", "RELE - Grupo 1", "RELE - Grupo 2", "RELE - Grupo 3"]
         
         for col_idx, t in enumerate(titulos, start=1):
             c = ws_out.cell(linha_inicio, col_idx, t)
@@ -75,31 +75,28 @@ def executar_comparacao(df_selecao_usuario, wb_in, fabricante, bytes_cid, de_par
         linhas_tabela_web = []
 
         for i, item in enumerate(itens_oa, start=linha_inicio + 1):
+            # Para a SEL, o código alvo é a própria chave (ex: 50P1P). Se não tiver, usa a coluna B do Excel (que já vem no col_a).
             cod_alvo = item["cod_cid"]
+            if cod_alvo == "SEM_DE_PARA" and item["col_a"]:
+                cod_alvo = item["col_a"]
+
             doi = doi_por_codigo.get(cod_alvo) or (doi_por_codigo.get(cod_alvo.split(".", 1)[-1]) if "." in cod_alvo else None)
             val_oa = item["col_c"]
             
-            # --- NOVIDADE AQUI ---
-            # Se a coluna de código no Excel estiver vazia (Modelo sem código), ele exibe o código CID que o sistema encontrou!
-            codigo_exibicao = str(item["col_a"]).strip() if str(item["col_a"]).strip() else str(item["cod_cid"])
-            if codigo_exibicao == "SEM_DE_PARA":
-                codigo_exibicao = "-" # Estético: se não achar o mapeamento, coloca um traço em vez da palavra
+            codigo_exibicao = str(item["col_a"]).strip() if str(item["col_a"]).strip() else str(cod_alvo)
+            if codigo_exibicao == "SEM_DE_PARA": codigo_exibicao = "-"
             
             ws_out.cell(i, 1, codigo_exibicao).border = borda
             ws_out.cell(i, 2, item["col_b"]).border = borda
             ws_out.cell(i, 3, "" if val_oa is None else val_oa).border = borda
 
-            linha_web = {
-                "Código": codigo_exibicao, 
-                "Descrição": str(item["col_b"]), 
-                "Ajuste OA": "" if val_oa is None else str(val_oa)
-            }
+            linha_web = {"Código": codigo_exibicao, "Descrição": str(item["col_b"]), "Ajuste OA": "" if val_oa is None else str(val_oa)}
 
             for tab_idx, col_excel in [(1, 4), (2, 5), (3, 6)]:
                 cel = ws_out.cell(i, col_excel)
                 cel.border = borda
                 if tab_idx in grupos_ativos:
-                    val_cid = driver_rele.obter_valor(doi, ns, str(tab_idx))
+                    val_cid = driver_rele.obter_valor(doi, ns_or_dados_sel, str(tab_idx))
                     cel.value = val_cid
                     linha_web[f"Grupo {tab_idx}"] = str(val_cid)
                     
@@ -116,11 +113,11 @@ def executar_comparacao(df_selecao_usuario, wb_in, fabricante, bytes_cid, de_par
             linhas_tabela_web.append(linha_web)
 
         grupos_txt = ", ".join([f"Grupo {g}" for g in grupos_ativos])
-        ws_out.cell(1, 1, f"RELATÓRIO GERAL - ABA '{nome_aba}' vs CID ({grupos_txt})").font = Font(bold=True, size=12)
+        ws_out.cell(1, 1, f"RELATÓRIO GERAL - ABA '{nome_aba}' vs RELÉ ({grupos_txt})").font = Font(bold=True, size=12)
         ws_out.cell(2, 2, "Indicador").font = Font(bold=True)
-        ws_out.cell(2, 4, "Table 1 (G1)").font = Font(bold=True)
-        ws_out.cell(2, 5, "Table 2 (G2)").font = Font(bold=True)
-        ws_out.cell(2, 6, "Table 3 (G3)").font = Font(bold=True)
+        ws_out.cell(2, 4, "Grupo 1").font = Font(bold=True)
+        ws_out.cell(2, 5, "Grupo 2").font = Font(bold=True)
+        ws_out.cell(2, 6, "Grupo 3").font = Font(bold=True)
 
         resumo = [
             (3, "Parâmetros Processados", [total if g in grupos_ativos else "-" for g in [1, 2, 3]]),
@@ -136,13 +133,7 @@ def executar_comparacao(df_selecao_usuario, wb_in, fabricante, bytes_cid, de_par
         for col_idx, w in {1: 30, 2: 58, 3: 26, 4: 26, 5: 26, 6: 26}.items():
             ws_out.column_dimensions[openpyxl.utils.get_column_letter(col_idx)].width = w
 
-        resultados_web.append({
-            "nome": nome_aba, 
-            "total": total, 
-            "corretos": corretos, 
-            "diferentes": diferentes, 
-            "df": pd.DataFrame(linhas_tabela_web)
-        })
+        resultados_web.append({"nome": nome_aba, "total": total, "corretos": corretos, "diferentes": diferentes, "df": pd.DataFrame(linhas_tabela_web)})
 
     if processou_algo:
         wb_out.remove(aba_padrao)
