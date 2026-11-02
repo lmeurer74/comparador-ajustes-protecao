@@ -56,7 +56,9 @@ def executar_comparacao(df_selecao_usuario, wb_in, fabricante, bytes_cid, filena
         if not grupos_ativos or nome_aba not in wb_in.sheetnames: continue
 
         ws_in = wb_in[nome_aba]
-        itens_oa = extrair_parametros_visiveis(ws_in, de_para_cod, de_para_campos, dois_por_ln)
+        
+        # Envia a informação do Fabricante para o leitor de Excel
+        itens_oa = extrair_parametros_visiveis(ws_in, fabricante, de_para_cod, de_para_campos, dois_por_ln)
         
         if not itens_oa: continue
         processou_algo = True
@@ -75,14 +77,19 @@ def executar_comparacao(df_selecao_usuario, wb_in, fabricante, bytes_cid, filena
         linhas_tabela_web = []
 
         for i, item in enumerate(itens_oa, start=linha_inicio + 1):
-            # Para a SEL, o código alvo é a própria chave (ex: 50P1P). Se não tiver, usa a coluna B do Excel (que já vem no col_a).
             cod_alvo = item["cod_cid"]
             if cod_alvo == "SEM_DE_PARA" and item["col_a"]:
                 cod_alvo = item["col_a"]
 
-            doi = doi_por_codigo.get(cod_alvo) or (doi_por_codigo.get(cod_alvo.split(".", 1)[-1]) if "." in cod_alvo else None)
+            # Para a SEL, o código é direto. Para a Arteche, ele decodifica os dicionários.
+            if fabricante == "SEL (Schweitzer)":
+                doi = cod_alvo
+            else:
+                doi = doi_por_codigo.get(cod_alvo) or (doi_por_codigo.get(cod_alvo.split(".", 1)[-1]) if "." in cod_alvo else None)
+                
             val_oa = item["col_c"]
             
+            # Mostra o código encontrado na Tela e no Excel
             codigo_exibicao = str(item["col_a"]).strip() if str(item["col_a"]).strip() else str(cod_alvo)
             if codigo_exibicao == "SEM_DE_PARA": codigo_exibicao = "-"
             
