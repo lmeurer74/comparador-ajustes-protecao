@@ -13,47 +13,45 @@ def obter_abas_validas(wb):
 def extrair_parametros_visiveis(ws, fabricante, de_para_cod, de_para_campos, dois_por_ln, conf_colunas=None):
     itens_oa = []
     
-    # Se o sistema não enviar as colunas, usa o padrão: B, C, G
     if conf_colunas is None:
-        conf_colunas = {"codigo": 2, "desc": 3, "ajuste": 7}
+        conf_colunas = {"codigo": 2, "desc": 3, "ajuste_g1": 6, "ajuste_g2": 7, "ajuste_g3": 8}
         
     idx_cod = conf_colunas["codigo"]
     idx_desc = conf_colunas["desc"]
-    idx_ajust = conf_colunas["ajuste"]
+    idx_g1 = conf_colunas["ajuste_g1"]
+    idx_g2 = conf_colunas["ajuste_g2"]
+    idx_g3 = conf_colunas["ajuste_g3"]
     
-    # ---------------------------------------------------------
-    # LÓGICA EXCLUSIVA PARA RELÉS SEL (Schweitzer)
-    # ---------------------------------------------------------
     if fabricante == "SEL (Schweitzer)":
         for r in range(12, ws.max_row + 1):
             if ws.row_dimensions[r].hidden: continue
             
             b_val = limpar_espacos(ws.cell(r, idx_cod).value)
             c_val = limpar_espacos(ws.cell(r, idx_desc).value)
-            g_val = ws.cell(r, idx_ajust).value
             
-            # FILTRO DE SEÇÕES E LIXO:
+            v_g1 = ws.cell(r, idx_g1).value
+            v_g2 = ws.cell(r, idx_g2).value
+            v_g3 = ws.cell(r, idx_g3).value
+            
             if not b_val: continue
             if b_val.upper() in ["PARAMETRO", "PARÂMETRO", "PARAMETER"]: continue
             if b_val.upper() == "ELABORAÇÃO E IMPLANTAÇÃO": break
             if b_val.startswith(">>") or "CONFIGURATION" in b_val.upper(): continue
             if b_val.upper().startswith("MOTIVO"): continue
             
-            # NOVO: Ignorar linhas que são apenas títulos de seção 
-            # (têm texto na coluna do código, mas não têm descrição nem valor de ajuste)
-            if b_val and not c_val and g_val is None: continue
+            # Filtra linhas vazias (sem descrição e sem valor de ajuste)
+            if b_val and not c_val and v_g1 is None and v_g2 is None and v_g3 is None: continue
             
             itens_oa.append({
                 "col_a": b_val,     
                 "col_b": c_val,     
-                "col_c": g_val,     
-                "cod_cid": b_val    # Para SEL, a própria chave é o código
+                "val_g1": v_g1,
+                "val_g2": v_g2,
+                "val_g3": v_g3,
+                "cod_cid": b_val    
             })
         return itens_oa
 
-    # ---------------------------------------------------------
-    # LÓGICA PARA ARTECHE E OUTROS (Modelos 1 e 2)
-    # ---------------------------------------------------------
     eh_modelo_1 = False
     for r in range(12, min(45, ws.max_row + 1)):
         if ws.row_dimensions[r].hidden: continue
@@ -77,11 +75,11 @@ def extrair_parametros_visiveis(ws, fabricante, de_para_cod, de_para_campos, doi
         
         if eh_modelo_1:
             d_val = limpar_espacos(ws.cell(r, idx_desc + 1).value) 
-            g_val = ws.cell(r, idx_ajust).value
+            v_g1 = ws.cell(r, idx_g1).value
+            v_g2 = ws.cell(r, idx_g2).value
+            v_g3 = ws.cell(r, idx_g3).value
             
-            # NOVO FILTRO DE SEÇÃO (Modelo 1 Arteche): 
-            # Se tiver texto no código (A/B), mas não tiver descrição, faixa ou ajuste, é apenas seção visual
-            if b_val and not d_val and g_val is None and not "." in b_val:
+            if b_val and not d_val and v_g1 is None and v_g2 is None and v_g3 is None and not "." in b_val:
                 secao, subgrupo = b_val, ""
                 continue
                 
@@ -92,19 +90,18 @@ def extrair_parametros_visiveis(ws, fabricante, de_para_cod, de_para_campos, doi
                     cod_cid = de_para_campos.get((chave_normalizada(secao), chave_normalizada(subgrupo), chave_normalizada(d_val)), b_val)
                 
                 desc_completa = f"{subgrupo} - {d_val}" if subgrupo else d_val
-                itens_oa.append({"col_a": b_val, "col_b": desc_completa, "col_c": g_val, "cod_cid": cod_cid})
+                itens_oa.append({"col_a": b_val, "col_b": desc_completa, "val_g1": v_g1, "val_g2": v_g2, "val_g3": v_g3, "cod_cid": cod_cid})
         else:
-            l_val = ws.cell(r, 12).value
-            r_val = ws.cell(r, 18).value
+            v_g1 = ws.cell(r, idx_g1).value
+            v_g2 = ws.cell(r, idx_g2).value
+            v_g3 = ws.cell(r, idx_g3).value
             
-            # Guardar nomes de seções para o de_para dinâmico, mas NÃO imprimir na tabela
             if b_val and not c_val:
                 secao, subgrupo = b_val, ""
                 continue
                 
             if c_val:
                 if b_val: subgrupo = b_val
-                val_oa = r_val if r_val is not None else (l_val if secao.upper() == "LPHD INFO" else None)
                 chave = (chave_normalizada(secao), chave_normalizada(subgrupo), chave_normalizada(c_val))
                 cod_cid = de_para_campos.get(chave)
                 
@@ -115,6 +112,6 @@ def extrair_parametros_visiveis(ws, fabricante, de_para_cod, de_para_campos, doi
                         cod_cid = f"{full_ln}.{doi_name}"
                         
                 desc_completa = f"{subgrupo} - {c_val}" if subgrupo else c_val
-                itens_oa.append({"col_a": "", "col_b": desc_completa, "col_c": val_oa, "cod_cid": cod_cid if cod_cid else "SEM_DE_PARA"})
+                itens_oa.append({"col_a": "", "col_b": desc_completa, "val_g1": v_g1, "val_g2": v_g2, "val_g3": v_g3, "cod_cid": cod_cid if cod_cid else "SEM_DE_PARA"})
 
     return itens_oa
