@@ -32,7 +32,7 @@ def style_dataframe_resultados(row):
                 styles[i] = 'background-color: #FFC7CE; color: #9C0006; font-weight: bold;'
     return styles
 
-def executar_comparacao(df_selecao_usuario, wb_in, fabricante, bytes_cid, filename_rele, rele_escolhido, de_para_cod, de_para_campos, driver_rele):
+def executar_comparacao(df_selecao_usuario, wb_in, fabricante, bytes_cid, filename_rele, rele_escolhido, de_para_cod, de_para_campos, driver_rele, conf_colunas=None):
     doi_por_codigo, dois_por_ln, ns_or_dados_sel = driver_rele.carregar_equipamento(bytes_cid, filename_rele, rele_escolhido)
     
     wb_out = openpyxl.Workbook()
@@ -58,8 +58,8 @@ def executar_comparacao(df_selecao_usuario, wb_in, fabricante, bytes_cid, filena
         ws_in = wb_in[nome_aba]
         
         # Envia a informação do Fabricante para o leitor de Excel
-        itens_oa = extrair_parametros_visiveis(ws_in, fabricante, de_para_cod, de_para_campos, dois_por_ln)
-        
+        itens_oa = extrair_parametros_visiveis(ws_in, fabricante, de_para_cod, de_para_campos, dois_por_ln, conf_colunas)
+
         if not itens_oa: continue
         processou_algo = True
         
