@@ -28,22 +28,26 @@ def extrair_parametros_visiveis(ws, fabricante, de_para_cod, de_para_campos, doi
         for r in range(12, ws.max_row + 1):
             if ws.row_dimensions[r].hidden: continue
             
-            # Puxa os dados das colunas exatas escolhidas pelo usuário
             b_val = limpar_espacos(ws.cell(r, idx_cod).value)
             c_val = limpar_espacos(ws.cell(r, idx_desc).value)
             g_val = ws.cell(r, idx_ajust).value
             
+            # FILTRO DE SEÇÕES E LIXO:
             if not b_val: continue
             if b_val.upper() in ["PARAMETRO", "PARÂMETRO", "PARAMETER"]: continue
             if b_val.upper() == "ELABORAÇÃO E IMPLANTAÇÃO": break
             if b_val.startswith(">>") or "CONFIGURATION" in b_val.upper(): continue
             if b_val.upper().startswith("MOTIVO"): continue
             
+            # NOVO: Ignorar linhas que são apenas títulos de seção 
+            # (têm texto na coluna do código, mas não têm descrição nem valor de ajuste)
+            if b_val and not c_val and g_val is None: continue
+            
             itens_oa.append({
-                "col_a": b_val,     # O código vai para a interface
-                "col_b": c_val,     # A descrição
-                "col_c": g_val,     # O valor do ajuste do OA
-                "cod_cid": b_val    # Para a SEL, usamos o próprio código como chave direta!
+                "col_a": b_val,     
+                "col_b": c_val,     
+                "col_c": g_val,     
+                "cod_cid": b_val    # Para SEL, a própria chave é o código
             })
         return itens_oa
 
@@ -54,7 +58,7 @@ def extrair_parametros_visiveis(ws, fabricante, de_para_cod, de_para_campos, doi
     for r in range(12, min(45, ws.max_row + 1)):
         if ws.row_dimensions[r].hidden: continue
         b_v = limpar_espacos(ws.cell(r, idx_cod).value)
-        d_v = limpar_espacos(ws.cell(r, idx_desc + 1).value) # Descrição estava na D (4) se Código estivesse na B
+        d_v = limpar_espacos(ws.cell(r, idx_desc + 1).value)
         if "." in b_v and d_v and not b_v.upper().startswith("MOTIVO"):
             eh_modelo_1 = True
             break
@@ -72,11 +76,12 @@ def extrair_parametros_visiveis(ws, fabricante, de_para_cod, de_para_campos, doi
         if b_val.upper() == "ELABORAÇÃO E IMPLANTAÇÃO": break
         
         if eh_modelo_1:
-            # Padrão: se Codigo for B, ajustamos a Descricao para D (idx_desc+1) e o Ajuste para G
             d_val = limpar_espacos(ws.cell(r, idx_desc + 1).value) 
             g_val = ws.cell(r, idx_ajust).value
             
-            if b_val and not d_val and "." not in b_val:
+            # NOVO FILTRO DE SEÇÃO (Modelo 1 Arteche): 
+            # Se tiver texto no código (A/B), mas não tiver descrição, faixa ou ajuste, é apenas seção visual
+            if b_val and not d_val and g_val is None and not "." in b_val:
                 secao, subgrupo = b_val, ""
                 continue
                 
@@ -89,11 +94,10 @@ def extrair_parametros_visiveis(ws, fabricante, de_para_cod, de_para_campos, doi
                 desc_completa = f"{subgrupo} - {d_val}" if subgrupo else d_val
                 itens_oa.append({"col_a": b_val, "col_b": desc_completa, "col_c": g_val, "cod_cid": cod_cid})
         else:
-            # Modelo sem código (Coluna B é o Subgrupo, C é a descrição)
-            # Lê L e R apenas se estivermos usando as colunas padrão (G não se aplica aqui diretamente)
             l_val = ws.cell(r, 12).value
             r_val = ws.cell(r, 18).value
             
+            # Guardar nomes de seções para o de_para dinâmico, mas NÃO imprimir na tabela
             if b_val and not c_val:
                 secao, subgrupo = b_val, ""
                 continue
