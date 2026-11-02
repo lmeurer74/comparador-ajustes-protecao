@@ -3,11 +3,11 @@ import pandas as pd
 import openpyxl
 from mapeamentos import carregar_biblioteca_prioritaria
 from leitor_excel import obter_abas_validas
-from leitor_rele import DriverArtecheAdaTech
+from leitor_rele import DriverArtecheAdaTech, DriverSEL
 from comparador import executar_comparacao, style_dataframe_resultados
 
 st.set_page_config(page_title="Comparador de Ajustes", layout="wide")
-st.title("Comparador de Ajustes de Proteção")
+st.title("⚡ Comparador de Ajustes de Proteção (Modular)")
 
 if 'arquivos_lidos' not in st.session_state:
     st.session_state.arquivos_lidos = False
@@ -16,11 +16,11 @@ if 'comparacao_concluida' not in st.session_state:
 
 col1, col2, col3, col4 = st.columns(4)
 with col1:
-    fabricante = st.selectbox("1. Equipamento:", ["ARTECHE_ADATECH"])
+    fabricante = st.selectbox("1. Fabricante:", ["SEL (Schweitzer)", "ARTECHE_ADATECH"])
 with col2:
     file_xlsx = st.file_uploader("2. Ordem de Ajuste (.xlsx):", type=["xlsx"])
 with col3:
-    file_cid = st.file_uploader("3. Arquivo (.cid):", type=["cid", "xml", "icd"])
+    file_cid = st.file_uploader("3. Arq. Equipamento (.cid, .rdb, .zip):", type=["cid", "xml", "icd", "rdb", "zip"])
 with col4:
     file_bib = st.file_uploader("4. De-Para Opcional:", type=["xlsx"])
 
@@ -29,30 +29,49 @@ if file_xlsx and file_cid:
     wb_in = openpyxl.load_workbook(file_xlsx, data_only=True)
     abas_visiveis = obter_abas_validas(wb_in)
     
-    st.markdown("### 🔗 Selecione os Grupos para Comparar")
+    bytes_rele = file_cid.getvalue()
+    nome_arquivo_rele = file_cid.name
     
+    # Define o driver e pede seleção do relé caso seja SEL (arquivos múltiplos)
+    rele_escolhido = None
+    if fabricante == "SEL (Schweitzer)":
+        driver_ativo = DriverSEL
+        reles_encontrados = DriverSEL.listar_reles(bytes_rele, nome_arquivo_rele)
+        
+        if not reles_encontrados:
+            st.error("Nenhum relé/vão encontrado dentro do arquivo fornecido. Verifique se o formato está correto.")
+        else:
+            rele_escolhido = st.selectbox("🎯 Múltiplos relés encontrados no arquivo. Selecione qual deseja comparar:", reles_encontrados)
+    else:
+        driver_ativo = DriverArtecheAdaTech
+
+    st.markdown("### 🔗 Selecione os Grupos para Comparar")
     dados_iniciais = [{"Processar": True, "Aba": nome, "Grupo 1": True, "Grupo 2": True, "Grupo 3": True} for nome in abas_visiveis]
     df_selecao = st.data_editor(pd.DataFrame(dados_iniciais), hide_index=True)
 
     if st.button("🔍 Iniciar Comparação", type="primary"):
-        with st.spinner("Comparando ajustes..."):
-            # Para extrair a biblioteca da memória, precisamos passar os nós lidos
-            _, dois_por_ln, _ = DriverArtecheAdaTech.carregar_equipamento(file_cid.getvalue())
-            
-            de_para_cod, de_para_campos = carregar_biblioteca_prioritaria(file_bib, fabricante, dois_por_ln)
-            
-            sucesso, excel_io, resultados_web = executar_comparacao(
-                df_selecao, wb_in, fabricante, file_cid.getvalue(), 
-                de_para_cod, de_para_campos, DriverArtecheAdaTech
-            )
-            
-            if sucesso:
-                st.session_state.comparacao_concluida = True
-                st.session_state.excel_io = excel_io
-                st.session_state.resultados_web = resultados_web
-                st.success("✅ Comparação finalizada com sucesso!")
-            else:
-                st.warning("⚠️ Nenhum dado válido foi encontrado para comparar (verifique se as abas contêm parâmetros visíveis).")
+        # Garante que um relé foi escolhido caso seja SEL
+        if fabricante == "SEL (Schweitzer)" and not rele_escolhido:
+            st.warning("Por favor, selecione o relé na lista antes de continuar.")
+        else:
+            with st.spinner("Comparando ajustes..."):
+                # Simula extração apenas para buscar descrições pro de-para genérico (útil pro Arteche)
+                _, dois_por_ln, _ = driver_ativo.carregar_equipamento(bytes_rele, nome_arquivo_rele, rele_escolhido)
+                
+                de_para_cod, de_para_campos = carregar_biblioteca_prioritaria(file_bib, fabricante, dois_por_ln)
+                
+                sucesso, excel_io, resultados_web = executar_comparacao(
+                    df_selecao, wb_in, fabricante, bytes_rele, nome_arquivo_rele, rele_escolhido, 
+                    de_para_cod, de_para_campos, driver_ativo
+                )
+                
+                if sucesso:
+                    st.session_state.comparacao_concluida = True
+                    st.session_state.excel_io = excel_io
+                    st.session_state.resultados_web = resultados_web
+                    st.success("✅ Comparação finalizada com sucesso!")
+                else:
+                    st.warning("⚠️ Nenhum dado válido foi encontrado para comparar (verifique se as abas contêm parâmetros visíveis).")
 
 if st.session_state.comparacao_concluida:
     st.download_button(
