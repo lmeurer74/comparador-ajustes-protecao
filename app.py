@@ -7,6 +7,28 @@ from leitor_rele import DriverArtecheAdaTech, DriverSEL
 from comparador import executar_comparacao, style_dataframe_resultados
 
 st.set_page_config(page_title="Comparador de Ajustes", layout="wide")
+
+# ==============================================================================
+# PAINEL LATERAL (SIDEBAR) PARA CONFIGURAÇÃO DE COLUNAS DO EXCEL
+# ==============================================================================
+with st.sidebar:
+    st.header("⚙️ Configurações de Leitura do Excel")
+    st.markdown("Se a Ordem de Ajuste (OA) fugir ao padrão, indique as colunas corretas:")
+    
+    col_codigo = st.text_input("Coluna do Código CID/SEL:", value="B", max_chars=1)
+    col_desc = st.text_input("Coluna da Descrição:", value="C", max_chars=1)
+    col_ajuste = st.text_input("Coluna do Ajuste Sugerido:", value="G", max_chars=1)
+    
+    # Validação simples para garantir que são letras
+    col_codigo = col_codigo.upper() if col_codigo.isalpha() else "B"
+    col_desc = col_desc.upper() if col_desc.isalpha() else "C"
+    col_ajuste = col_ajuste.upper() if col_ajuste.isalpha() else "G"
+    
+    st.info(f"O sistema lerá: Código na col **{col_codigo}**, Descrição na col **{col_desc}** e Ajuste na col **{col_ajuste}**.")
+
+# ==============================================================================
+# INTERFACE PRINCIPAL
+# ==============================================================================
 st.title("⚡ Comparador de Ajustes de Proteção (Modular)")
 
 if 'arquivos_lidos' not in st.session_state:
@@ -50,19 +72,23 @@ if file_xlsx and file_cid:
     df_selecao = st.data_editor(pd.DataFrame(dados_iniciais), hide_index=True)
 
     if st.button("🔍 Iniciar Comparação", type="primary"):
-        # Garante que um relé foi escolhido caso seja SEL
         if fabricante == "SEL (Schweitzer)" and not rele_escolhido:
             st.warning("Por favor, selecione o relé na lista antes de continuar.")
         else:
             with st.spinner("Comparando ajustes..."):
-                # Simula extração apenas para buscar descrições pro de-para genérico (útil pro Arteche)
                 _, dois_por_ln, _ = driver_ativo.carregar_equipamento(bytes_rele, nome_arquivo_rele, rele_escolhido)
-                
                 de_para_cod, de_para_campos = carregar_biblioteca_prioritaria(file_bib, fabricante, dois_por_ln)
+                
+                # O dicionário conf_colunas informa ao comparador onde buscar os dados
+                conf_colunas = {
+                    "codigo": openpyxl.utils.column_index_from_string(col_codigo),
+                    "desc": openpyxl.utils.column_index_from_string(col_desc),
+                    "ajuste": openpyxl.utils.column_index_from_string(col_ajuste)
+                }
                 
                 sucesso, excel_io, resultados_web = executar_comparacao(
                     df_selecao, wb_in, fabricante, bytes_rele, nome_arquivo_rele, rele_escolhido, 
-                    de_para_cod, de_para_campos, driver_ativo
+                    de_para_cod, de_para_campos, driver_ativo, conf_colunas
                 )
                 
                 if sucesso:
@@ -71,7 +97,7 @@ if file_xlsx and file_cid:
                     st.session_state.resultados_web = resultados_web
                     st.success("✅ Comparação finalizada com sucesso!")
                 else:
-                    st.warning("⚠️ Nenhum dado válido foi encontrado para comparar (verifique se as abas contêm parâmetros visíveis).")
+                    st.warning("⚠️ Nenhum dado válido foi encontrado para comparar (verifique as colunas selecionadas no menu lateral).")
 
 if st.session_state.comparacao_concluida:
     st.download_button(
