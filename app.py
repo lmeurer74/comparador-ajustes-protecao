@@ -12,19 +12,22 @@ st.set_page_config(page_title="Comparador de Ajustes", layout="wide")
 # PAINEL LATERAL (SIDEBAR) PARA CONFIGURAÇÃO DE COLUNAS DO EXCEL
 # ==============================================================================
 with st.sidebar:
-    st.header("⚙️ Configurações de Leitura do Excel")
-    st.markdown("Se a Ordem de Ajuste (OA) fugir ao padrão, indique as colunas corretas:")
+    st.header("⚙️ Configurações de Leitura")
+    st.markdown("Indique em quais colunas da Ordem de Ajuste (Excel) estão os valores:")
     
     col_codigo = st.text_input("Coluna do Código CID/SEL:", value="B", max_chars=1)
     col_desc = st.text_input("Coluna da Descrição:", value="C", max_chars=1)
-    col_ajuste = st.text_input("Coluna do Ajuste Sugerido:", value="G", max_chars=1)
+    st.markdown("---")
+    st.markdown("**Colunas de Ajuste por Grupo:**")
+    col_g1 = st.text_input("Ajuste Grupo 1 (ex: F):", value="F", max_chars=1)
+    col_g2 = st.text_input("Ajuste Grupo 2 (ex: G):", value="G", max_chars=1)
+    col_g3 = st.text_input("Ajuste Grupo 3 (ex: H):", value="H", max_chars=1)
     
-    # Validação simples para garantir que são letras
     col_codigo = col_codigo.upper() if col_codigo.isalpha() else "B"
     col_desc = col_desc.upper() if col_desc.isalpha() else "C"
-    col_ajuste = col_ajuste.upper() if col_ajuste.isalpha() else "G"
-    
-    st.info(f"O sistema lerá: Código na col **{col_codigo}**, Descrição na col **{col_desc}** e Ajuste na col **{col_ajuste}**.")
+    col_g1 = col_g1.upper() if col_g1.isalpha() else "F"
+    col_g2 = col_g2.upper() if col_g2.isalpha() else "G"
+    col_g3 = col_g3.upper() if col_g3.isalpha() else "H"
 
 # ==============================================================================
 # INTERFACE PRINCIPAL
@@ -54,7 +57,6 @@ if file_xlsx and file_cid:
     bytes_rele = file_cid.getvalue()
     nome_arquivo_rele = file_cid.name
     
-    # Define o driver e pede seleção do relé caso seja SEL (arquivos múltiplos)
     rele_escolhido = None
     if fabricante == "SEL (Schweitzer)":
         driver_ativo = DriverSEL
@@ -79,11 +81,12 @@ if file_xlsx and file_cid:
                 _, dois_por_ln, _ = driver_ativo.carregar_equipamento(bytes_rele, nome_arquivo_rele, rele_escolhido)
                 de_para_cod, de_para_campos = carregar_biblioteca_prioritaria(file_bib, fabricante, dois_por_ln)
                 
-                # O dicionário conf_colunas informa ao comparador onde buscar os dados
                 conf_colunas = {
                     "codigo": openpyxl.utils.column_index_from_string(col_codigo),
                     "desc": openpyxl.utils.column_index_from_string(col_desc),
-                    "ajuste": openpyxl.utils.column_index_from_string(col_ajuste)
+                    "ajuste_g1": openpyxl.utils.column_index_from_string(col_g1),
+                    "ajuste_g2": openpyxl.utils.column_index_from_string(col_g2),
+                    "ajuste_g3": openpyxl.utils.column_index_from_string(col_g3)
                 }
                 
                 sucesso, excel_io, resultados_web = executar_comparacao(
@@ -97,7 +100,7 @@ if file_xlsx and file_cid:
                     st.session_state.resultados_web = resultados_web
                     st.success("✅ Comparação finalizada com sucesso!")
                 else:
-                    st.warning("⚠️ Nenhum dado válido foi encontrado para comparar (verifique as colunas selecionadas no menu lateral).")
+                    st.warning("⚠️ Nenhum dado válido foi encontrado para comparar (verifique as colunas selecionadas).")
 
 if st.session_state.comparacao_concluida:
     st.download_button(
@@ -117,9 +120,9 @@ if st.session_state.comparacao_concluida:
         with tab:
             st.markdown(f"**Total Processado:** {res['total']} parâmetros")
             c1, c2, c3 = st.columns(3)
-            c1.info(f"**Grupo 1:** {res['corretos'][1]} OK / {res['diferentes'][1]} Diferentes")
-            c2.info(f"**Grupo 2:** {res['corretos'][2]} OK / {res['diferentes'][2]} Diferentes")
-            c3.info(f"**Grupo 3:** {res['corretos'][3]} OK / {res['diferentes'][3]} Diferentes")
+            if 1 in res['corretos']: c1.info(f"**Grupo 1:** {res['corretos'][1]} OK / {res['diferentes'][1]} Diferentes")
+            if 2 in res['corretos']: c2.info(f"**Grupo 2:** {res['corretos'][2]} OK / {res['diferentes'][2]} Diferentes")
+            if 3 in res['corretos']: c3.info(f"**Grupo 3:** {res['corretos'][3]} OK / {res['diferentes'][3]} Diferentes")
             
             st.dataframe(
                 res["df"].style.apply(style_dataframe_resultados, axis=1),
