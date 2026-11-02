@@ -10,8 +10,16 @@ def obter_abas_validas(wb):
                 abas_validas.append(sheet.title)
     return abas_validas
 
-def extrair_parametros_visiveis(ws, fabricante, de_para_cod, de_para_campos, dois_por_ln):
+def extrair_parametros_visiveis(ws, fabricante, de_para_cod, de_para_campos, dois_por_ln, conf_colunas=None):
     itens_oa = []
+    
+    # Se o sistema não enviar as colunas, usa o padrão: B, C, G
+    if conf_colunas is None:
+        conf_colunas = {"codigo": 2, "desc": 3, "ajuste": 7}
+        
+    idx_cod = conf_colunas["codigo"]
+    idx_desc = conf_colunas["desc"]
+    idx_ajust = conf_colunas["ajuste"]
     
     # ---------------------------------------------------------
     # LÓGICA EXCLUSIVA PARA RELÉS SEL (Schweitzer)
@@ -20,9 +28,10 @@ def extrair_parametros_visiveis(ws, fabricante, de_para_cod, de_para_campos, doi
         for r in range(12, ws.max_row + 1):
             if ws.row_dimensions[r].hidden: continue
             
-            b_val = limpar_espacos(ws.cell(r, 2).value) # Código SEL
-            c_val = limpar_espacos(ws.cell(r, 3).value) # Descrição 
-            g_val = ws.cell(r, 7).value                 # Ajuste Sugerido OA
+            # Puxa os dados das colunas exatas escolhidas pelo usuário
+            b_val = limpar_espacos(ws.cell(r, idx_cod).value)
+            c_val = limpar_espacos(ws.cell(r, idx_desc).value)
+            g_val = ws.cell(r, idx_ajust).value
             
             if not b_val: continue
             if b_val.upper() in ["PARAMETRO", "PARÂMETRO", "PARAMETER"]: continue
@@ -44,8 +53,8 @@ def extrair_parametros_visiveis(ws, fabricante, de_para_cod, de_para_campos, doi
     eh_modelo_1 = False
     for r in range(12, min(45, ws.max_row + 1)):
         if ws.row_dimensions[r].hidden: continue
-        b_v = limpar_espacos(ws.cell(r, 2).value)
-        d_v = limpar_espacos(ws.cell(r, 4).value)
+        b_v = limpar_espacos(ws.cell(r, idx_cod).value)
+        d_v = limpar_espacos(ws.cell(r, idx_desc + 1).value) # Descrição estava na D (4) se Código estivesse na B
         if "." in b_v and d_v and not b_v.upper().startswith("MOTIVO"):
             eh_modelo_1 = True
             break
@@ -56,15 +65,16 @@ def extrair_parametros_visiveis(ws, fabricante, de_para_cod, de_para_campos, doi
     for r in range(start_row, ws.max_row + 1):
         if ws.row_dimensions[r].hidden: continue
         
-        b_val = limpar_espacos(ws.cell(r, 2).value)
-        c_val = limpar_espacos(ws.cell(r, 3).value)
+        b_val = limpar_espacos(ws.cell(r, idx_cod).value)
+        c_val = limpar_espacos(ws.cell(r, idx_desc).value)
         
         if b_val.upper() in ["PARAMETRO", "PARÂMETRO"]: continue
         if b_val.upper() == "ELABORAÇÃO E IMPLANTAÇÃO": break
         
         if eh_modelo_1:
-            d_val = limpar_espacos(ws.cell(r, 4).value)
-            g_val = ws.cell(r, 7).value
+            # Padrão: se Codigo for B, ajustamos a Descricao para D (idx_desc+1) e o Ajuste para G
+            d_val = limpar_espacos(ws.cell(r, idx_desc + 1).value) 
+            g_val = ws.cell(r, idx_ajust).value
             
             if b_val and not d_val and "." not in b_val:
                 secao, subgrupo = b_val, ""
@@ -79,6 +89,8 @@ def extrair_parametros_visiveis(ws, fabricante, de_para_cod, de_para_campos, doi
                 desc_completa = f"{subgrupo} - {d_val}" if subgrupo else d_val
                 itens_oa.append({"col_a": b_val, "col_b": desc_completa, "col_c": g_val, "cod_cid": cod_cid})
         else:
+            # Modelo sem código (Coluna B é o Subgrupo, C é a descrição)
+            # Lê L e R apenas se estivermos usando as colunas padrão (G não se aplica aqui diretamente)
             l_val = ws.cell(r, 12).value
             r_val = ws.cell(r, 18).value
             
