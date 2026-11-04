@@ -4,25 +4,50 @@ import pandas as pd
 import io
 from leitor_excel import extrair_parametros_visiveis
 
-def normalizar_para_comparacao(valor):
-    if valor is None: return ""
-    s = str(valor).strip()
-    if s.upper() in ["YES", "1", "TRUE"]: return "YES"
-    if s.upper() in ["NO", "0", "FALSE"]: return "NO"
-    if s.endswith(" A") and s[:-2].strip().replace('.', '', 1).isdigit():
-        s = s[:-2].strip()
-    if s.upper() == "IEC DEFINE TIME": return "IEC DEFINITE TIME"
+def normalizar_valor(valor):
+    """Apenas limpa o valor de espaços ou textos específicos de engenharia sem alterar números."""
+    if pd.isna(valor) or valor is None: return ""
+    s = str(valor).strip().upper()
+    if s == "IEC DEFINE TIME": return "IEC DEFINITE TIME"
+    if s.endswith(" A"):
+        num_part = s[:-2].strip().replace(',', '.')
+        if num_part.replace('.', '', 1).isdigit():
+            s = num_part
+    return s
+
+def valores_sao_iguais(val_oa, val_cid):
+    """Compara dois valores de forma inteligente, lidando com decimais, vírgulas, booleanos e português."""
+    s1 = normalizar_valor(val_oa)
+    s2 = normalizar_valor(val_cid)
+    
+    # 1. Comparação exata de texto
+    if s1 == s2:
+        return True
+        
+    # 2. Equivalências Lógicas (Inglês e Português)
+    bool_true = ["YES", "Y", "SIM", "S", "TRUE", "1", "1.0", "1.00", "ON", "ENABLE", "ENABLED"]
+    bool_false = ["NO", "N", "NÃO", "NAO", "FALSE", "0", "0.0", "0.00", "OFF", "DISABLE", "DISABLED"]
+    
+    if (s1 in bool_true and s2 in bool_true) or (s1 in bool_false and s2 in bool_false):
+        return True
+        
+    # 3. Equivalência Matemática (Lida com ponto vs vírgula e zeros à direita. Ex: 0,1 == 0.10)
     try:
-        f = float(s.replace(',', '.'))
-        return str(int(f)) if f.is_integer() else f"{f:.6f}".rstrip('0').rstrip('.')
+        f1 = float(s1.replace(',', '.'))
+        f2 = float(s2.replace(',', '.'))
+        # Se a diferença matemática for praticamente zero, são o mesmo número
+        return abs(f1 - f2) < 1e-6
     except ValueError:
-        return s.upper()
+        pass
+        
+    return False
 
 def style_dataframe_resultados(row):
+    """Aplica o estilo visual verde/vermelho na tabela do Streamlit."""
     styles = [''] * len(row)
     for i, col in enumerate(row.index):
         if 'Relé' in col:
-            # Obtém o número do grupo a partir do nome da coluna (ex: "Relé G1")
+            # Obtém o número do grupo a partir do nome da coluna (ex: "Relé G1" -> "1")
             grp_num = col.split(' ')[-1].replace('G', '')
             col_oa = f"OA G{grp_num}"
             val_cid = row[col]
@@ -30,7 +55,7 @@ def style_dataframe_resultados(row):
             
             if val_cid == "-":
                 styles[i] = 'color: gray; text-align: center;'
-            elif normalizar_para_comparacao(val_oa) == normalizar_para_comparacao(val_cid):
+            elif valores_sao_iguais(val_oa, val_cid):
                 styles[i] = 'color: #006100; font-weight: bold;'
             else:
                 styles[i] = 'background-color: #FFC7CE; color: #9C0006; font-weight: bold;'
@@ -68,7 +93,6 @@ def executar_comparacao(df_selecao_usuario, wb_in, fabricante, bytes_cid, filena
         ws_out = wb_out.create_sheet(title=f"CONF_{nome_aba}"[:31])
         linha_inicio = 8
         titulos = ["CÓDIGO (Referência)", "DESCRIÇÃO DOS PARÂMETROS"]
-        # Adiciona títulos para cada grupo ativo
         for g in grupos_ativos:
             titulos.extend([f"Ajuste OA (G{g})", f"Equipamento Relé (G{g})"])
         
@@ -116,7 +140,7 @@ def executar_comparacao(df_selecao_usuario, wb_in, fabricante, bytes_cid, filena
                 linha_web[f"OA G{tab_idx}"] = "" if val_oa is None else str(val_oa)
                 linha_web[f"Relé G{tab_idx}"] = str(val_cid)
                 
-                if normalizar_para_comparacao(val_oa) == normalizar_para_comparacao(val_cid):
+                if valores_sao_iguais(val_oa, val_cid):
                     corretos[tab_idx] += 1
                 else:
                     diferentes[tab_idx] += 1
