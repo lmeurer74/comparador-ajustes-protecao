@@ -14,13 +14,14 @@ def extrair_parametros_visiveis(ws, fabricante, de_para_cod, de_para_campos, doi
     itens_oa = []
     
     if conf_colunas is None:
-        conf_colunas = {"codigo": 2, "desc": 3, "ajuste_g1": 6, "ajuste_g2": 7, "ajuste_g3": 8}
+        conf_colunas = {"codigo": 2, "desc": 3, "ajuste_g1": 6, "ajuste_g2": 7, "ajuste_g3": 8, "ajuste_g4": 9}
         
     idx_cod = conf_colunas["codigo"]
     idx_desc = conf_colunas["desc"]
     idx_g1 = conf_colunas["ajuste_g1"]
     idx_g2 = conf_colunas["ajuste_g2"]
     idx_g3 = conf_colunas["ajuste_g3"]
+    idx_g4 = conf_colunas["ajuste_g4"]
     
     if fabricante == "SEL (Schweitzer)":
         for r in range(12, ws.max_row + 1):
@@ -32,6 +33,7 @@ def extrair_parametros_visiveis(ws, fabricante, de_para_cod, de_para_campos, doi
             v_g1 = ws.cell(r, idx_g1).value
             v_g2 = ws.cell(r, idx_g2).value
             v_g3 = ws.cell(r, idx_g3).value
+            v_g4 = ws.cell(r, idx_g4).value
             
             if not b_val: continue
             if b_val.upper() in ["PARAMETRO", "PARÂMETRO", "PARAMETER"]: continue
@@ -39,8 +41,8 @@ def extrair_parametros_visiveis(ws, fabricante, de_para_cod, de_para_campos, doi
             if b_val.startswith(">>") or "CONFIGURATION" in b_val.upper(): continue
             if b_val.upper().startswith("MOTIVO"): continue
             
-            # Filtra linhas vazias (sem descrição e sem valor de ajuste)
-            if b_val and not c_val and v_g1 is None and v_g2 is None and v_g3 is None: continue
+            # Filtra linhas vazias (sem descrição e sem valor de ajuste em nenhum dos 4 grupos)
+            if b_val and not c_val and v_g1 is None and v_g2 is None and v_g3 is None and v_g4 is None: continue
             
             itens_oa.append({
                 "col_a": b_val,     
@@ -48,6 +50,7 @@ def extrair_parametros_visiveis(ws, fabricante, de_para_cod, de_para_campos, doi
                 "val_g1": v_g1,
                 "val_g2": v_g2,
                 "val_g3": v_g3,
+                "val_g4": v_g4,
                 "cod_cid": b_val    
             })
         return itens_oa
@@ -78,8 +81,9 @@ def extrair_parametros_visiveis(ws, fabricante, de_para_cod, de_para_campos, doi
             v_g1 = ws.cell(r, idx_g1).value
             v_g2 = ws.cell(r, idx_g2).value
             v_g3 = ws.cell(r, idx_g3).value
+            v_g4 = ws.cell(r, idx_g4).value
             
-            if b_val and not d_val and v_g1 is None and v_g2 is None and v_g3 is None and not "." in b_val:
+            if b_val and not d_val and v_g1 is None and v_g2 is None and v_g3 is None and v_g4 is None and not "." in b_val:
                 secao, subgrupo = b_val, ""
                 continue
                 
@@ -90,11 +94,12 @@ def extrair_parametros_visiveis(ws, fabricante, de_para_cod, de_para_campos, doi
                     cod_cid = de_para_campos.get((chave_normalizada(secao), chave_normalizada(subgrupo), chave_normalizada(d_val)), b_val)
                 
                 desc_completa = f"{subgrupo} - {d_val}" if subgrupo else d_val
-                itens_oa.append({"col_a": b_val, "col_b": desc_completa, "val_g1": v_g1, "val_g2": v_g2, "val_g3": v_g3, "cod_cid": cod_cid})
+                itens_oa.append({"col_a": b_val, "col_b": desc_completa, "val_g1": v_g1, "val_g2": v_g2, "val_g3": v_g3, "val_g4": v_g4, "cod_cid": cod_cid})
         else:
             v_g1 = ws.cell(r, idx_g1).value
             v_g2 = ws.cell(r, idx_g2).value
             v_g3 = ws.cell(r, idx_g3).value
+            v_g4 = ws.cell(r, idx_g4).value
             
             if b_val and not c_val:
                 secao, subgrupo = b_val, ""
@@ -112,6 +117,6 @@ def extrair_parametros_visiveis(ws, fabricante, de_para_cod, de_para_campos, doi
                         cod_cid = f"{full_ln}.{doi_name}"
                         
                 desc_completa = f"{subgrupo} - {c_val}" if subgrupo else c_val
-                itens_oa.append({"col_a": "", "col_b": desc_completa, "val_g1": v_g1, "val_g2": v_g2, "val_g3": v_g3, "cod_cid": cod_cid if cod_cid else "SEM_DE_PARA"})
+                itens_oa.append({"col_a": "", "col_b": desc_completa, "val_g1": v_g1, "val_g2": v_g2, "val_g3": v_g3, "val_g4": v_g4, "cod_cid": cod_cid if cod_cid else "SEM_DE_PARA"})
 
     return itens_oa
