@@ -5,7 +5,6 @@ import io
 from leitor_excel import extrair_parametros_visiveis
 
 def normalizar_valor(valor):
-    """Apenas limpa o valor de espaços ou textos específicos de engenharia sem alterar números."""
     if pd.isna(valor) or valor is None: return ""
     s = str(valor).strip().upper()
     if s == "IEC DEFINE TIME": return "IEC DEFINITE TIME"
@@ -16,26 +15,21 @@ def normalizar_valor(valor):
     return s
 
 def valores_sao_iguais(val_oa, val_cid):
-    """Compara dois valores de forma inteligente, lidando com decimais, vírgulas, booleanos e português."""
     s1 = normalizar_valor(val_oa)
     s2 = normalizar_valor(val_cid)
     
-    # 1. Comparação exata de texto
     if s1 == s2:
         return True
         
-    # 2. Equivalências Lógicas (Inglês e Português)
     bool_true = ["YES", "Y", "SIM", "S", "TRUE", "1", "1.0", "1.00", "ON", "ENABLE", "ENABLED"]
     bool_false = ["NO", "N", "NÃO", "NAO", "FALSE", "0", "0.0", "0.00", "OFF", "DISABLE", "DISABLED"]
     
     if (s1 in bool_true and s2 in bool_true) or (s1 in bool_false and s2 in bool_false):
         return True
         
-    # 3. Equivalência Matemática (Lida com ponto vs vírgula e zeros à direita. Ex: 0,1 == 0.10)
     try:
         f1 = float(s1.replace(',', '.'))
         f2 = float(s2.replace(',', '.'))
-        # Se a diferença matemática for praticamente zero, são o mesmo número
         return abs(f1 - f2) < 1e-6
     except ValueError:
         pass
@@ -43,11 +37,9 @@ def valores_sao_iguais(val_oa, val_cid):
     return False
 
 def style_dataframe_resultados(row):
-    """Aplica o estilo visual verde/vermelho na tabela do Streamlit."""
     styles = [''] * len(row)
     for i, col in enumerate(row.index):
         if 'Relé' in col:
-            # Obtém o número do grupo a partir do nome da coluna (ex: "Relé G1" -> "1")
             grp_num = col.split(' ')[-1].replace('G', '')
             col_oa = f"OA G{grp_num}"
             val_cid = row[col]
@@ -81,7 +73,8 @@ def executar_comparacao(df_selecao_usuario, wb_in, fabricante, bytes_cid, filena
         if not row["Processar"]: continue
         
         nome_aba = row["Aba"]
-        grupos_ativos = [g for g in [1, 2, 3] if row.get(f"Grupo {g}")]
+        # Agora verifica até 4 grupos dinamicamente
+        grupos_ativos = [g for g in [1, 2, 3, 4] if row.get(f"Grupo {g}")]
         if not grupos_ativos or nome_aba not in wb_in.sheetnames: continue
 
         ws_in = wb_in[nome_aba]
