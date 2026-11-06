@@ -12,7 +12,7 @@ st.set_page_config(page_title="Comparador de Ajustes", layout="wide")
 # PAINEL LATERAL (SIDEBAR) PARA CONFIGURAÇÃO DE COLUNAS DO EXCEL
 # ==============================================================================
 with st.sidebar:
-    st.header("⚙️ Configurações de Leitura")
+    st.header("## Configurações de Leitura ##")
     st.markdown("Indique em quais colunas da Ordem de Ajuste (Excel) estão os valores:")
     
     col_codigo = st.text_input("Coluna do Código CID/SEL:", value="B", max_chars=1)
@@ -34,7 +34,7 @@ with st.sidebar:
 # ==============================================================================
 # INTERFACE PRINCIPAL
 # ==============================================================================
-st.title("⚡ Comparador de Ajustes de Proteção (Modular)")
+st.title(">>> Comparador de Ajustes de Proteção - OA vs Relé <<<")
 
 if 'arquivos_lidos' not in st.session_state:
     st.session_state.arquivos_lidos = False
@@ -67,15 +67,15 @@ if file_xlsx and file_cid:
         if not reles_encontrados:
             st.error("Nenhum relé/vão encontrado dentro do arquivo fornecido. Verifique se o formato está correto.")
         else:
-            rele_escolhido = st.selectbox("🎯 Múltiplos relés encontrados no arquivo. Selecione qual deseja comparar:", reles_encontrados)
+            rele_escolhido = st.selectbox("> Múltiplos relés encontrados no arquivo. Selecione qual deseja comparar:", reles_encontrados)
     else:
         driver_ativo = DriverArtecheAdaTech
 
-    st.markdown("### 🔗 Selecione os Grupos para Comparar")
+    st.markdown("### Selecione os Grupos para Comparar ###")
     dados_iniciais = [{"Processar": True, "Aba": nome, "Grupo 1": True, "Grupo 2": True, "Grupo 3": True, "Grupo 4": True} for nome in abas_visiveis]
     df_selecao = st.data_editor(pd.DataFrame(dados_iniciais), hide_index=True)
 
-    if st.button("🔍 Iniciar Comparação", type="primary"):
+    if st.button(">> Iniciar Comparação", type="primary"):
         if fabricante == "SEL (Schweitzer)" and not rele_escolhido:
             st.warning("Por favor, selecione o relé na lista antes de continuar.")
         else:
@@ -101,20 +101,20 @@ if file_xlsx and file_cid:
                     st.session_state.comparacao_concluida = True
                     st.session_state.excel_io = excel_io
                     st.session_state.resultados_web = resultados_web
-                    st.success("✅ Comparação finalizada com sucesso!")
+                    st.success("Comparação finalizada com sucesso!")
                 else:
-                    st.warning("⚠️ Nenhum dado válido foi encontrado para comparar (verifique as colunas selecionadas).")
+                    st.warning("Erro! Nenhum dado válido foi encontrado para comparar (verifique as colunas selecionadas).")
 
 if st.session_state.comparacao_concluida:
     st.download_button(
-        "📥 Exportar Planilha de Resultado (.xlsx)", 
+        "Exportar Planilha de Resultado (.xlsx)", 
         data=st.session_state.excel_io, 
         file_name="Resultado_Conferencia.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
     
     st.markdown("---")
-    st.subheader("📊 Relatório de Conferência")
+    st.subheader("Relatório de Conferência")
     abas_nomes = [res["nome"] for res in st.session_state.resultados_web]
     tabs = st.tabs(abas_nomes)
     
