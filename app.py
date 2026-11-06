@@ -49,7 +49,7 @@ with col2:
 with col3:
     file_cid = st.file_uploader("3. Arq. Equipamento (.cid, .rdb, .zip):", type=["cid", "xml", "icd", "rdb", "zip"])
 with col4:
-    file_bib = st.file_uploader("4. De-Para Opcional:", type=["xlsx"], enabled=false)
+    file_bib = st.file_uploader("4. De-Para Opcional:", type=["xlsx"])
 
 if file_xlsx and file_cid:
     st.session_state.arquivos_lidos = True
