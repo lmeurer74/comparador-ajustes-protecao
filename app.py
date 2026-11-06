@@ -19,17 +19,17 @@ with st.sidebar:
     col_desc = st.text_input("Coluna da Descrição:", value="C", max_chars=1)
     st.markdown("---")
     st.markdown("**Colunas de Ajuste por Grupo:**")
-    col_g1 = st.text_input("Ajuste Grupo 1 (ex: F):", value="G", max_chars=1)
+    col_g1 = st.text_input("Ajuste Grupo 1 (ex: G):", value="G", max_chars=1)
     col_g2 = st.text_input("Ajuste Grupo 2 (ex: G):", value="G", max_chars=1)
-    col_g3 = st.text_input("Ajuste Grupo 3 (ex: H):", value="G", max_chars=1)
-    col_g4 = st.text_input("Ajuste Grupo 4 (ex: I):", value="G", max_chars=1)
+    col_g3 = st.text_input("Ajuste Grupo 3 (ex: H):", value="H", max_chars=1)
+    col_g4 = st.text_input("Ajuste Grupo 4 (ex: I):", value="I", max_chars=1)
     
     col_codigo = col_codigo.upper() if col_codigo.isalpha() else "B"
     col_desc = col_desc.upper() if col_desc.isalpha() else "C"
     col_g1 = col_g1.upper() if col_g1.isalpha() else "G"
     col_g2 = col_g2.upper() if col_g2.isalpha() else "G"
-    col_g3 = col_g3.upper() if col_g3.isalpha() else "G"
-    col_g4 = col_g4.upper() if col_g4.isalpha() else "G"
+    col_g3 = col_g3.upper() if col_g3.isalpha() else "H"
+    col_g4 = col_g4.upper() if col_g4.isalpha() else "I"
 
 # ==============================================================================
 # INTERFACE PRINCIPAL
